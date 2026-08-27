@@ -1,5 +1,7 @@
 .git
+**/.git
 .stage
+.cache
 dist
 release
 node_modules

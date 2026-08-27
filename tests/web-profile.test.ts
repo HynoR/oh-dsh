@@ -76,6 +76,7 @@ test('packaged web distribution exposes the unified ohdsh command', () => {
   const build = readFileSync(new URL('../scripts/build-web.mjs', import.meta.url), 'utf8')
   assert.match(build, /join\(packageDir, 'bin', 'ohdsh'\)/)
   assert.match(build, /join\(packageDir, 'lib', 'oh-dsh', 'cli\.js'\)/)
+  assert.match(build, /OH_DSH_WEB_PACKAGE_DIR/)
   assert.match(build, /exec "\$ROOT\/bin\/ohdsh" web "\$@"/)
   assert.match(build, /数据默认保存在 \\`~\/\.ohdsh\\`/)
 })

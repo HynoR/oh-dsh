@@ -8,7 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { portableZipArguments } from '../src/archive.ts'
 import { resolveProductVersion } from '../src/version.ts'
@@ -24,7 +24,12 @@ const isWindowsHost = process.platform === 'win32'
 const isWindowsTarget = platform === 'win'
 const stagedNode = join(stage, 'node-runtime', isWindowsTarget ? 'node.exe' : join('bin', 'node'))
 const dirName = `oh-dsh-web-${version}-${platform}-${arch}`
-const packageDir = join(release, dirName)
+const defaultPackageDir = join(release, dirName)
+const packageDir = process.env.OH_DSH_WEB_PACKAGE_DIR !== undefined
+  && process.env.OH_DSH_WEB_PACKAGE_DIR !== ''
+  ? resolve(process.env.OH_DSH_WEB_PACKAGE_DIR)
+  : defaultPackageDir
+const writeReleaseArchives = packageDir === defaultPackageDir
 
 for (const required of [
   join(root, 'dist', 'web.js'),
@@ -130,33 +135,34 @@ options. Press \`Ctrl+C\` for a graceful shutdown.
 Documentation: https://github.com/hust-open-atom-club/oh-dsh/tree/main/docs
 `)
 
-const tarball = join(release, `${dirName}.tar.gz`)
-const zip = join(release, `${dirName}.zip`)
-rmSync(tarball, { force: true })
-rmSync(zip, { force: true })
-run('tar', ['-czf', tarball, dirName], { cwd: release })
-if (isWindowsHost) {
-  // bsdtar builds zip archives from the .zip suffix.
-  run('tar', ['-a', '-cf', zip, dirName], { cwd: release })
-} else {
-  run('zip', portableZipArguments(zip, dirName), { cwd: release })
-}
-
 console.log(`Packaged Oh-DSH Web ${version}: ${packageDir}`)
-console.log(`  ${tarball}`)
-console.log(`  ${zip}`)
+if (writeReleaseArchives) {
+  const tarball = join(release, `${dirName}.tar.gz`)
+  const zip = join(release, `${dirName}.zip`)
+  rmSync(tarball, { force: true })
+  rmSync(zip, { force: true })
+  run('tar', ['-czf', tarball, dirName], { cwd: release })
+  if (isWindowsHost) {
+    // bsdtar builds zip archives from the .zip suffix.
+    run('tar', ['-a', '-cf', zip, dirName], { cwd: release })
+  } else {
+    run('zip', portableZipArguments(zip, dirName), { cwd: release })
+  }
+  console.log(`  ${tarball}`)
+  console.log(`  ${zip}`)
 
-// Self-verify the packaged layout exactly like the staged one.
-const smoke = join(root, 'scripts', 'smoke-web.mjs')
-const hostPlatform = { darwin: 'darwin', linux: 'linux', win: 'win32' }[platform]
-if (hostPlatform === process.platform) {
-  const verify = spawnSync(process.execPath, [smoke, 'release'], {
-    cwd: root,
-    env: process.env,
-    stdio: 'inherit',
-  })
-  if (verify.error !== undefined) throw verify.error
-  if (verify.status !== 0) process.exit(verify.status ?? 1)
-} else {
-  console.log(`Skipping packaged smoke test: ${platform} runtime cannot launch on ${process.platform}`)
+  // Self-verify the packaged layout exactly like the staged one.
+  const smoke = join(root, 'scripts', 'smoke-web.mjs')
+  const hostPlatform = { darwin: 'darwin', linux: 'linux', win: 'win32' }[platform]
+  if (hostPlatform === process.platform) {
+    const verify = spawnSync(process.execPath, [smoke, 'release'], {
+      cwd: root,
+      env: process.env,
+      stdio: 'inherit',
+    })
+    if (verify.error !== undefined) throw verify.error
+    if (verify.status !== 0) process.exit(verify.status ?? 1)
+  } else {
+    console.log(`Skipping packaged smoke test: ${platform} runtime cannot launch on ${process.platform}`)
+  }
 }

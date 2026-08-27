@@ -278,9 +278,11 @@ it to an untrusted network.
 ### Run Web in Docker
 
 `docker/` packages this checkout's Web surface, including the LAN tenant
-compartment, into a linux/amd64 image. Build on Linux. Rebuild the image
-to upgrade; do not run `ohdsh update` inside the container. Initialize
-submodules first (`git submodule update --init --recursive`).
+compartment, into a Linux image. The builder follows its own CPU; do not
+pin `--platform`. Rebuild the image to upgrade; do not run `ohdsh update`
+inside the container. Empty submodules in the build context are fine: the
+image fetches the Web-stage npm releases and the Better Sidebar source it
+needs.
 
 ```sh
 docker compose -f docker/compose.yaml up --build

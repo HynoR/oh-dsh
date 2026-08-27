@@ -1,6 +1,6 @@
 # Oh-DSH Web from this checkout. Bind mounts next to this file survive
 # container rebuilds and Docker resets. Upgrade by rebuilding the image,
-# not `ohdsh update`. Build on Linux; the image is linux/amd64.
+# not `ohdsh update`. Node layout follows the builder's CPU; do not pin it.
 #
 #   docker compose -f docker/compose.yaml up --build
 #

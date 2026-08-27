@@ -32,7 +32,7 @@ import {
   resolvePinnedPnpm,
 } from './dsh-source.mjs'
 import {
-  landlockLauncherPackageName,
+  landlockLauncherPackageNameFor,
   restoreLandlockLauncher,
 } from './landlock-launcher.mjs'
 import { resolveNodeDistributionPlatform } from '../src/node-platform.ts'
@@ -1281,24 +1281,22 @@ function ensureLinuxPtyBuild() {
 
 function ensureLinuxLandlockLauncher() {
   if (nodePlatform !== 'linux') return
-  if (nodeArch !== 'x64') {
-    throw new Error(`unsupported Landlock launcher architecture: linux-${nodeArch}`)
-  }
-
+  const packageName = landlockLauncherPackageNameFor(nodeArch)
   const requireFromRoot = createRequire(join(root, 'package.json'))
   let sourceManifestPath
   try {
-    sourceManifestPath = requireFromRoot.resolve(`${landlockLauncherPackageName}/package.json`)
-  } catch (cause) {
-    throw new Error(
-      `${landlockLauncherPackageName} is missing; run pnpm install on linux-x64 before staging`,
-      { cause },
-    )
+    sourceManifestPath = requireFromRoot.resolve(`${packageName}/package.json`)
+  } catch {
+    // Optional platform package. Missing launcher is fail-closed at runtime
+    // probe, not a staging abort — Web and Docker follow the builder CPU.
+    console.log(`Skipping Landlock launcher (${packageName} is not installed)`)
+    return
   }
 
   const launcher = restoreLandlockLauncher({
     runtimeRoot: runtime,
     sourcePackageRoot: dirname(sourceManifestPath),
+    packageName,
   })
   console.log(`Restored Linux Landlock launcher: ${launcher}`)
 }

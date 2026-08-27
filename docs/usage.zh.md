@@ -236,9 +236,10 @@ Agent 文件系统访问仍然共享。向不可信网络开放前，应把服�
 
 ### 用 Docker 运行 Web
 
-`docker/` 把当前仓库的 Web surface（含局域网租户隔间）打成 linux/amd64 镜像。
-请在 Linux 上构建。升级请重建镜像，不要在容器内执行 `ohdsh update`。构建前先
-初始化 submodule（`git submodule update --init --recursive`）。
+`docker/` 把当前仓库的 Web surface（含局域网租户隔间）打成 Linux 镜像。构建跟随
+构建机自己的 CPU，不要钉 `--platform`。升级请重建镜像，不要在容器内执行
+`ohdsh update`。构建上下文里 submodule 目录为空也可以：镜像会自行拉取
+Web-stage 所需的 npm 发行和 Better Sidebar 源码。
 
 ```sh
 docker compose -f docker/compose.yaml up --build

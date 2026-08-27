@@ -46,6 +46,8 @@ test('surface staging keeps Desktop isolated and ships Liangshen as a Web/Deskto
   assert.doesNotMatch(tuiPackages, /'@oh-dsh\/web-tenant'/)
   assert.match(script, /alignBetterSidebarPtyDependency/)
   assert.match(script, /runtimePackageDirectory\('node-pty'\)/)
+  assert.match(script, /Skipping Landlock launcher/)
+  assert.doesNotMatch(script, /unsupported Landlock launcher architecture/)
 })
 
 test('root deploy workspace owns nested TUI link packages', () => {

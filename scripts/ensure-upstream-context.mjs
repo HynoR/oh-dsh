@@ -72,14 +72,10 @@ try {
 // Never process.exit() here: scripts/build.mjs imports this module, and an
 // early exit would kill the whole root build and leave dist/ stale.
 if (revision === null) {
-  // Release layout: the sandboxed Nix build cannot run pnpm at all, so the
-  // assembly substitutes the prebuilt npm release.
+  // Release layout: Nix and Docker unpack the npm tarball so lib/ is present
+  // and this compile is skipped. A git checkout still builds from source.
   if (!existsSync(libEntry)) {
-    if (!existsSync(join(contextDir, 'package.json'))) {
-      throw new Error('upstream/dsh-context has no git checkout and no prebuilt lib/index.js')
-    }
-    // Submodule working tree without .git (Docker .dockerignore excludes it).
-    buildContext('source-without-git')
+    throw new Error('upstream/dsh-context has no git checkout and no prebuilt lib/index.js')
   }
 } else if (stamped !== revision || !existsSync(libEntry)) {
   buildContext(revision)
