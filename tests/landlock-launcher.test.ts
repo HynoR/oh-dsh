@@ -12,6 +12,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import {
   landlockLauncherPackageName,
+  landlockLauncherPackageNameFor,
   restoreLandlockLauncher,
 } from '../scripts/landlock-launcher.mjs'
 
@@ -84,7 +85,16 @@ test('Linux staging fails when the published Landlock launcher is missing', () =
   }
 })
 
-test('desktop pins the published Linux x64 Landlock launcher package', () => {
+test('desktop pins the published Linux Landlock launcher family', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-  assert.equal(manifest.optionalDependencies?.[landlockLauncherPackageName], packageVersion)
+  assert.equal(manifest.optionalDependencies?.['@deepseek-ai/node-addon-landlock-run'], packageVersion)
+  assert.equal(
+    manifest.optionalDependencies?.[landlockLauncherPackageNameFor('x64')],
+    packageVersion,
+  )
+  assert.equal(
+    manifest.optionalDependencies?.[landlockLauncherPackageNameFor('arm64')],
+    packageVersion,
+  )
+  assert.equal(landlockLauncherPackageName, landlockLauncherPackageNameFor('x64'))
 })

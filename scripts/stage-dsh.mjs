@@ -1179,6 +1179,13 @@ function installDesktopPackages(surface = 'all') {
 
   const installedVersions = {}
   for (const spec of packages) {
+    // A filtered surface (web) must not require TUI-only checkout files.
+    if (!existsSync(spec.manifest)) {
+      if (selected === undefined) {
+        throw new Error(`bundled plugin manifest missing: ${spec.manifest}`)
+      }
+      continue
+    }
     const manifest = JSON.parse(readFileSync(spec.manifest, 'utf8'))
     if (selected !== undefined && !selected.has(manifest.name)) continue
     delete manifest.build
@@ -1213,6 +1220,12 @@ function installDesktopPackages(surface = 'all') {
       adaptTuiLiangshenPresentation(packageDir)
     }
     installedVersions[manifest.name] = manifest.version
+  }
+  if (selected !== undefined) {
+    const missing = [...selected].filter(name => installedVersions[name] === undefined)
+    if (missing.length > 0) {
+      throw new Error(`stage surface ${surface} missing packages: ${missing.join(', ')}`)
+    }
   }
   const cliManifestPath = join(runtime, 'package.json')
   const cliManifest = JSON.parse(readFileSync(cliManifestPath, 'utf8'))
@@ -1287,8 +1300,8 @@ function ensureLinuxLandlockLauncher() {
   try {
     sourceManifestPath = requireFromRoot.resolve(`${packageName}/package.json`)
   } catch {
-    // Optional platform package. Missing launcher is fail-closed at runtime
-    // probe, not a staging abort — Web and Docker follow the builder CPU.
+    // Optional platform package (npm os/cpu). Missing launcher is
+    // fail-closed at runtime probe, not a staging abort.
     console.log(`Skipping Landlock launcher (${packageName} is not installed)`)
     return
   }

@@ -288,7 +288,8 @@ needs.
 docker compose -f docker/compose.yaml up --build
 ```
 
-The UI listens on `http://127.0.0.1:3080`.
+The UI listens on the Docker host at `http://127.0.0.1:3080` (`network_mode:
+host`; no bridge port publish).
 
 Two host bind mounts sit next to the compose file and survive container
 rebuilds and Docker engine resets:

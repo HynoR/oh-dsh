@@ -48,6 +48,8 @@ test('surface staging keeps Desktop isolated and ships Liangshen as a Web/Deskto
   assert.match(script, /runtimePackageDirectory\('node-pty'\)/)
   assert.match(script, /Skipping Landlock launcher/)
   assert.doesNotMatch(script, /unsupported Landlock launcher architecture/)
+  assert.match(script, /bundled plugin manifest missing/)
+  assert.match(script, /stage surface \$\{surface\} missing packages/)
 })
 
 test('root deploy workspace owns nested TUI link packages', () => {

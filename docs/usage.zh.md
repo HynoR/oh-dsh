@@ -245,7 +245,8 @@ Web-stage 所需的 npm 发行和 Better Sidebar 源码。
 docker compose -f docker/compose.yaml up --build
 ```
 
-界面监听 `http://127.0.0.1:3080`。
+界面在 Docker 宿主机的 `http://127.0.0.1:3080` 上监听（`network_mode: host`，
+不用 bridge 端口映射）。
 
 compose 文件旁有两处宿主机 bind mount，重建容器或重置 Docker 引擎后仍然保留：
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Expand OH_DSH_TRUSTED_HOSTS into --trusted-host flags and start Oh-DSH Web.
-# dsh-web-app refuses --host 0.0.0.0; Docker publish needs a non-loopback
-# listener, so proxy 0.0.0.0:3080 onto the loopback server.
+# Host networking shares the Docker host loopback; dsh-web-app binds
+# 127.0.0.1:3080 (it refuses --host 0.0.0.0).
 set -eu
 
 if [ -z "${OH_DSH_TRUSTED_HOSTS:-}" ]; then
@@ -25,11 +25,9 @@ export OH_DSH_HOME=/data
 export DSH_OH_WEB_OPEN="${DSH_OH_WEB_OPEN:-0}"
 export OH_DSH_UPDATE_CHECK="${OH_DSH_UPDATE_CHECK:-0}"
 
-socat TCP-LISTEN:3080,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:3081 &
-
 exec tini -- /opt/oh-dsh/bin/ohdsh web \
   --host 127.0.0.1 \
-  --port 3081 \
+  --port 3080 \
   --data /data \
   --no-open \
   "$@"

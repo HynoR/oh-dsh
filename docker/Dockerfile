@@ -47,7 +47,6 @@ RUN apt-get update \
     curl \
     git \
     libatomic1 \
-    socat \
     tini \
   && rm -rf /var/lib/apt/lists/*
 
@@ -68,5 +67,4 @@ ENV HOME=/home/ohdsh
 
 WORKDIR /workspace
 USER ohdsh
-EXPOSE 3080
 ENTRYPOINT ["/usr/local/bin/ohdsh-web-entrypoint"]
