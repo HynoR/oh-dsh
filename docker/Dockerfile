@@ -47,6 +47,7 @@ RUN apt-get update \
     curl \
     git \
     libatomic1 \
+    socat \
     tini \
   && rm -rf /var/lib/apt/lists/*
 
