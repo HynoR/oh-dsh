@@ -277,15 +277,16 @@ it to an untrusted network.
 
 ### Run Web in Docker
 
-`docker/` packages the published linux-x64 Web release. Rebuild the image
-to upgrade; do not run `ohdsh update` inside the container.
+`docker/` packages this checkout's Web surface, including the LAN tenant
+compartment, into a linux/amd64 image. Build on Linux. Rebuild the image
+to upgrade; do not run `ohdsh update` inside the container. Initialize
+submodules first (`git submodule update --init --recursive`).
 
 ```sh
 docker compose -f docker/compose.yaml up --build
 ```
 
-The UI listens on `http://127.0.0.1:3080`. Pin a release with
-`OH_DSH_VERSION=vX.Y.Z` at build time.
+The UI listens on `http://127.0.0.1:3080`.
 
 Two host bind mounts sit next to the compose file and survive container
 rebuilds and Docker engine resets:

@@ -236,14 +236,15 @@ Agent 文件系统访问仍然共享。向不可信网络开放前，应把服�
 
 ### 用 Docker 运行 Web
 
-`docker/` 打包已发布的 linux-x64 Web 发行。升级请重建镜像，不要在容器内执行
-`ohdsh update`。
+`docker/` 把当前仓库的 Web surface（含局域网租户隔间）打成 linux/amd64 镜像。
+请在 Linux 上构建。升级请重建镜像，不要在容器内执行 `ohdsh update`。构建前先
+初始化 submodule（`git submodule update --init --recursive`）。
 
 ```sh
 docker compose -f docker/compose.yaml up --build
 ```
 
-界面监听 `http://127.0.0.1:3080`。构建时用 `OH_DSH_VERSION=vX.Y.Z` 钉住发行版本。
+界面监听 `http://127.0.0.1:3080`。
 
 compose 文件旁有两处宿主机 bind mount，重建容器或重置 Docker 引擎后仍然保留：
 
