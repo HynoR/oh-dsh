@@ -51,6 +51,17 @@ function runPnpm(args) {
   run('pnpm', version === null ? args : ['dlx', `pnpm@${version}`, ...args])
 }
 
+function buildContext(label) {
+  // --ignore-workspace keeps this an isolated install of the submodule's own
+  // pinned lockfile; without it pnpm may resolve the parent workspace
+  // instead and skip the submodule's toolchain entirely.
+  runPnpm(['install', '--frozen-lockfile', '--ignore-scripts', '--ignore-workspace'])
+  runPnpm(['run', 'build'])
+  mkdirSync(dirname(stamp), { recursive: true })
+  writeFileSync(stamp, `${label}\n`)
+  console.log(`Built upstream/dsh-context at ${label}`)
+}
+
 const revision = currentRevision()
 let stamped
 try {
@@ -64,15 +75,12 @@ if (revision === null) {
   // Release layout: the sandboxed Nix build cannot run pnpm at all, so the
   // assembly substitutes the prebuilt npm release.
   if (!existsSync(libEntry)) {
-    throw new Error('upstream/dsh-context has no git checkout and no prebuilt lib/index.js')
+    if (!existsSync(join(contextDir, 'package.json'))) {
+      throw new Error('upstream/dsh-context has no git checkout and no prebuilt lib/index.js')
+    }
+    // Submodule working tree without .git (Docker .dockerignore excludes it).
+    buildContext('source-without-git')
   }
 } else if (stamped !== revision || !existsSync(libEntry)) {
-  // --ignore-workspace keeps this an isolated install of the submodule's own
-  // pinned lockfile; without it pnpm may resolve the parent workspace
-  // instead and skip the submodule's toolchain entirely.
-  runPnpm(['install', '--frozen-lockfile', '--ignore-scripts', '--ignore-workspace'])
-  runPnpm(['run', 'build'])
-  mkdirSync(dirname(stamp), { recursive: true })
-  writeFileSync(stamp, `${revision}\n`)
-  console.log(`Built upstream/dsh-context at ${revision}`)
+  buildContext(revision)
 }
