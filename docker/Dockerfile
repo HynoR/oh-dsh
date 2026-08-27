@@ -1,6 +1,4 @@
-# Oh-DSH Web-only image from this checkout. linux/amd64 matches the
-# linux-x64 Node runtime the Web stage vendors.
-FROM --platform=linux/amd64 node:24-bookworm AS builder
+FROM node:24-bookworm AS builder
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -49,7 +47,7 @@ RUN set -eu; \
     > "$dest/bin/oh-dsh-web"; \
   chmod 0755 "$dest/bin/oh-dsh-web"
 
-FROM --platform=linux/amd64 debian:bookworm-slim
+FROM debian:bookworm-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
