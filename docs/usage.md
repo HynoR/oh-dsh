@@ -263,17 +263,20 @@ overrides the data root for Desktop, Web, and TUI together. Press `Ctrl+C` for
 a graceful shutdown.
 
 Do not bind to `0.0.0.0` without an access boundary. For LAN exposure, add
-`--trusted-host`. Non-loopback clients enter the built-in account compartment:
-the first login registers a username and passphrase, later logins must match,
-and each username sees only its indexed sessions and workspaces. Open the
-service through `127.0.0.1` on the host to bypass the compartment and configure
-model providers.
+`--trusted-host` (the DNS-rebinding fence). The built-in account compartment
+does not admit anyone by IP or Host. If `web-tenant-admin` is missing or
+empty, the first HTML visit sets the administrator passphrase (username
+`admin`). After that, every client signs in. A regular name's first login
+registers it; later logins must match; each regular name sees only its
+indexed sessions and workspaces. The administrator cookie sees the unscoped
+catalog. Core settings and credentials still require a loopback `Host`; that
+is independent of the tenant cookie.
 
 The compartment is for a trusted LAN, not the public internet. Its HttpOnly
-cookie and the `web-tenants` file both contain the reusable token
-`user:sha256(passphrase)`; providers, plugins, Marketplace, and Agent filesystem
-access remain shared. Put the service behind authenticated TLS before exposing
-it to an untrusted network.
+cookie, `web-tenant-admin`, and the `web-tenants` file contain reusable
+tokens of the form `user:sha256(passphrase)`; providers, plugins, Marketplace,
+and Agent filesystem access remain shared. Put the service behind
+authenticated TLS before exposing it to an untrusted network.
 
 ### Run Web in Docker
 
@@ -305,8 +308,10 @@ exactly one surface running.
 
 `OH_DSH_TRUSTED_HOSTS` is the DNS-rebinding fence, not login. The default
 is `localhost:3080`. Behind a reverse proxy, set it to the `Host` the
-browser sends and pass `proxy_set_header Host $host;`. Disable proxy
-buffering for SSE (`proxy_buffering off` and a long `proxy_read_timeout`).
+browser sends, for example `OH_DSH_TRUSTED_HOSTS=dsh.example.com` (see
+`docker/.env.example`), and pass `proxy_set_header Host $http_host;`.
+Disable proxy buffering for SSE (`proxy_buffering off` and a long
+`proxy_read_timeout`).
 Proxy authentication and TLS remain required when the built-in trusted-LAN
 compartment is not a sufficient boundary.
 

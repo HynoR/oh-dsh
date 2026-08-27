@@ -22,12 +22,13 @@ import type {
   Server,
   ServerResponse,
 } from 'node:http'
-import { isIP } from 'node:net'
 import { dirname, join } from 'node:path'
 import type { Duplex } from 'node:stream'
 
 const TENANT_BASE = '/oh-dsh/tenant'
 export const TENANT_COOKIE = 'oh_dsh_tenant'
+export const ADMIN_USER = 'admin'
+const TENANT_ADMIN_FILE = 'web-tenant-admin'
 const TENANT_CREDENTIALS_FILE = 'web-tenants'
 const TENANT_INDEX_FILE = 'web-tenants-index.json'
 
@@ -37,7 +38,12 @@ const TENANT_PATHS = new Set([
   `${TENANT_BASE}/login`,
   `${TENANT_BASE}/logout`,
   `${TENANT_BASE}/me`,
+  `${TENANT_BASE}/setup`,
 ])
+
+export type TenantSession =
+  | { kind: 'admin' }
+  | { kind: 'tenant'; user: string }
 
 type TenantIds = {
   sessionIds: Set<string>
@@ -168,6 +174,7 @@ function parseCredentials(content: string | undefined): Map<string, string> {
     if (line === '') continue
     const token = parseTenantToken(line)
     if (token === undefined) throw new Error('web tenant credential file is invalid')
+    if (token.user === ADMIN_USER) continue
     const current = credentials.get(token.user)
     if (current !== undefined && !safeHashEqual(current, token.hash)) {
       throw new Error(`web tenant credential file contains conflicting user ${token.user}`)
@@ -235,34 +242,91 @@ function serializedIndex(index: ReadonlyMap<string, TenantIds>): string {
   return `${JSON.stringify(value, undefined, 2)}\n`
 }
 
+function parseAdminHash(content: string | undefined): string | undefined {
+  if (content === undefined) return
+  const lines = content.split('\n').map(line => line.trim()).filter(line => line !== '')
+  if (lines.length === 0) return
+  if (lines.length !== 1) throw new Error('web tenant admin file is invalid')
+  const token = parseTenantToken(lines[0] ?? '')
+  if (token === undefined || token.user !== ADMIN_USER) {
+    throw new Error('web tenant admin file is invalid')
+  }
+  return token.hash
+}
+
 /** Durable credentials and ownership index under the existing Oh-DSH data root. */
 export class WebTenantStore {
+  readonly adminPath: string
   readonly credentialsPath: string
   readonly indexPath: string
+  #adminHash: string | undefined
   #credentials: Map<string, string>
   #index: Map<string, TenantIds>
   #tail = Promise.resolve()
 
   constructor(dataRoot: string) {
+    this.adminPath = join(dataRoot, TENANT_ADMIN_FILE)
     this.credentialsPath = join(dataRoot, TENANT_CREDENTIALS_FILE)
     this.indexPath = join(dataRoot, TENANT_INDEX_FILE)
+    this.#adminHash = parseAdminHash(readPrivateFile(this.adminPath))
     this.#credentials = parseCredentials(readPrivateFile(this.credentialsPath))
     this.#index = parseIndex(readPrivateFile(this.indexPath))
+  }
+
+  hasAdmin(): boolean {
+    return this.#adminHash !== undefined
   }
 
   authenticateToken(value: string | undefined): string | undefined {
     if (value === undefined) return
     const token = parseTenantToken(value)
-    if (token === undefined) return
+    if (token === undefined || token.user === ADMIN_USER) return
     const expected = this.#credentials.get(token.user)
     if (expected === undefined || !safeHashEqual(expected, token.hash)) return
     return token.user
+  }
+
+  authenticateCookie(value: string | undefined): TenantSession | undefined {
+    if (value === undefined) return
+    const token = parseTenantToken(value)
+    if (token === undefined) return
+    if (token.user === ADMIN_USER) {
+      if (this.#adminHash !== undefined && safeHashEqual(this.#adminHash, token.hash)) {
+        return { kind: 'admin' }
+      }
+      return
+    }
+    const user = this.authenticateToken(value)
+    if (user === undefined) return
+    return { kind: 'tenant', user }
+  }
+
+  authenticateAdminPassword(password: string): string | undefined {
+    if (this.#adminHash === undefined) return
+    if (password.length < 1 || password.length > 1024) return
+    const token = tenantToken(ADMIN_USER, password)
+    const parsed = parseTenantToken(token)
+    if (parsed === undefined || !safeHashEqual(this.#adminHash, parsed.hash)) return
+    return token
+  }
+
+  async setAdminPassword(password: string): Promise<{ token: string } | undefined> {
+    const token = tenantToken(ADMIN_USER, password)
+    const parsed = parseTenantToken(token)
+    if (parsed === undefined) throw new Error('generated admin token is invalid')
+    return await this.#serialize(async () => {
+      if (this.#adminHash !== undefined) return
+      await writePrivateFile(this.adminPath, `${token}\n`)
+      this.#adminHash = parsed.hash
+      return { token }
+    })
   }
 
   async authenticateOrRegister(
     user: string,
     password: string,
   ): Promise<{ created: boolean; token: string } | undefined> {
+    if (user === ADMIN_USER) throw new Error('admin is reserved')
     const token = tenantToken(user, password)
     const parsed = parseTenantToken(token)
     if (parsed === undefined) throw new Error('generated tenant token is invalid')
@@ -356,14 +420,6 @@ function cookieValue(request: IncomingMessage): string | undefined {
   }
 }
 
-export function isLoopbackAddress(address: string | undefined): boolean {
-  if (address === undefined) return false
-  const normalized = address.toLowerCase().split('%', 1)[0] ?? ''
-  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true
-  const ipv4 = normalized.startsWith('::ffff:') ? normalized.slice(7) : normalized
-  return isIP(ipv4) === 4 && ipv4.split('.')[0] === '127'
-}
-
 function pathname(request: IncomingMessage): string | undefined {
   try {
     return new URL(request.url ?? '/', 'http://oh-dsh.internal').pathname
@@ -386,50 +442,100 @@ function escapeHtml(value: string): string {
     .replaceAll('"', '&quot;')
 }
 
+function scopedUser(session: TenantSession | undefined): string | undefined {
+  return session?.kind === 'tenant' ? session.user : undefined
+}
+
 function renderLoginPage(options: {
   chinese?: boolean
   error?: LoginError
+  setup?: boolean
   user?: string
 } = {}): string {
   const chinese = options.chinese === true
-  const copy = chinese ? {
-    badge: '局域网会话隔间',
-    button: '进入 Oh-DSH',
-    first: '首次使用会登记该用户名；以后请使用同一口令。',
-    heading: '你的工作区，\n只在这个账号里出现。',
-    password: '口令',
-    passwordHint: '1–1024 个字符',
-    scope: '渠道、插件和 Marketplace 仍由此 Web 进程共享。',
-    title: 'Oh-DSH Web 登录',
-    user: '用户名',
-    userHint: '字母、数字、点、下划线或短横线',
-    errors: {
-      credentials: '用户名已存在，口令不正确。',
-      password: '请输入 1–1024 个字符的口令。',
-      username: '用户名需为 1–32 个允许字符。',
-      workspace: '暂时无法准备该账号的工作区，请重试。',
-    },
-  } : {
-    badge: 'LAN session compartment',
-    button: 'Enter Oh-DSH',
-    first: 'First use reserves this name. Return with the same passphrase.',
-    heading: 'Your workspace,\ninside one account.',
-    password: 'Passphrase',
-    passwordHint: '1–1024 characters',
-    scope: 'Providers, plugins, and Marketplace remain shared by this Web process.',
-    title: 'Sign in to Oh-DSH Web',
-    user: 'Username',
-    userHint: 'Letters, numbers, dot, underscore, or hyphen',
-    errors: {
-      credentials: 'That username exists and the passphrase does not match.',
-      password: 'Enter a passphrase containing 1–1024 characters.',
-      username: 'Use 1–32 allowed characters for the username.',
-      workspace: 'The account workspace could not be prepared. Try again.',
-    },
-  }
+  const setup = options.setup === true
+  const copy = setup
+    ? chinese ? {
+      badge: '管理员',
+      button: '保存并进入',
+      first: '口令只写一次，保存在数据目录的 web-tenant-admin。之后每次访问都要登录，包括本机。',
+      heading: '先设置管理员口令，\n再打开这个 Web。',
+      password: '口令',
+      passwordHint: '1–1024 个字符',
+      scope: '保存之后，访问这个 Web 的人都要登录。',
+      title: '设置 Oh-DSH Web 管理员',
+      user: '用户名',
+      userHint: '字母、数字、点、下划线或短横线',
+      errors: {
+        credentials: '管理员口令已经存在，请登录。',
+        password: '请输入 1–1024 个字符的口令。',
+        username: '用户名需为 1–32 个允许字符。',
+        workspace: '暂时无法准备该账号的工作区，请重试。',
+      },
+    } : {
+      badge: 'Administrator',
+      button: 'Save and continue',
+      first: 'Written once to web-tenant-admin under the data root. Every later visit must sign in, including on this machine.',
+      heading: 'Set an administrator\npassphrase first.',
+      password: 'Passphrase',
+      passwordHint: '1–1024 characters',
+      scope: 'After this is saved, everyone who opens this Web must sign in.',
+      title: 'Set the Oh-DSH Web administrator',
+      user: 'Username',
+      userHint: 'Letters, numbers, dot, underscore, or hyphen',
+      errors: {
+        credentials: 'The administrator passphrase is already set. Sign in.',
+        password: 'Enter a passphrase containing 1–1024 characters.',
+        username: 'Use 1–32 allowed characters for the username.',
+        workspace: 'The account workspace could not be prepared. Try again.',
+      },
+    }
+    : chinese ? {
+      badge: '会话隔间',
+      button: '进入 Oh-DSH',
+      first: '普通账号首次使用会登记用户名。管理员用户名为 admin。',
+      heading: '你的工作区，\n只在这个账号里出现。',
+      password: '口令',
+      passwordHint: '1–1024 个字符',
+      scope: '渠道、插件和 Marketplace 仍由此 Web 进程共享。',
+      title: 'Oh-DSH Web 登录',
+      user: '用户名',
+      userHint: '字母、数字、点、下划线或短横线',
+      errors: {
+        credentials: '用户名已存在，口令不正确。',
+        password: '请输入 1–1024 个字符的口令。',
+        username: '用户名需为 1–32 个允许字符。',
+        workspace: '暂时无法准备该账号的工作区，请重试。',
+      },
+    } : {
+      badge: 'Session compartment',
+      button: 'Enter Oh-DSH',
+      first: 'First use of a regular name reserves it. The administrator username is admin.',
+      heading: 'Your workspace,\ninside one account.',
+      password: 'Passphrase',
+      passwordHint: '1–1024 characters',
+      scope: 'Providers, plugins, and Marketplace remain shared by this Web process.',
+      title: 'Sign in to Oh-DSH Web',
+      user: 'Username',
+      userHint: 'Letters, numbers, dot, underscore, or hyphen',
+      errors: {
+        credentials: 'That username exists and the passphrase does not match.',
+        password: 'Enter a passphrase containing 1–1024 characters.',
+        username: 'Use 1–32 allowed characters for the username.',
+        workspace: 'The account workspace could not be prepared. Try again.',
+      },
+    }
   const error = options.error === undefined ? '' : `
         <p class="error" role="alert">${copy.errors[options.error]}</p>`
   const user = escapeHtml(options.user ?? '')
+  const usernameField = setup ? '' : `
+        <label>${copy.user}
+          <input name="user" value="${user}" autocomplete="username" inputmode="text" pattern="[A-Za-z0-9._-]{1,32}" maxlength="32" required autofocus>
+          <small>${copy.userHint}</small>
+        </label>`
+  const passwordFocus = setup ? ' autofocus' : ''
+  const passwordAutocomplete = setup ? 'new-password' : 'current-password'
+  const action = setup ? `${TENANT_BASE}/setup` : `${TENANT_BASE}/login`
   return `<!doctype html>
 <html lang="${chinese ? 'zh-CN' : 'en'}">
 <head>
@@ -510,13 +616,9 @@ function renderLoginPage(options: {
     </section>
     <section class="form-panel">
       <p class="badge">${copy.badge}</p>${error}
-      <form method="post" action="${TENANT_BASE}/login">
-        <label>${copy.user}
-          <input name="user" value="${user}" autocomplete="username" inputmode="text" pattern="[A-Za-z0-9._-]{1,32}" maxlength="32" required autofocus>
-          <small>${copy.userHint}</small>
-        </label>
+      <form method="post" action="${action}">${usernameField}
         <label>${copy.password}
-          <input name="password" type="password" autocomplete="current-password" minlength="1" maxlength="1024" required>
+          <input name="password" type="password" autocomplete="${passwordAutocomplete}" minlength="1" maxlength="1024" required${passwordFocus}>
           <small>${copy.passwordHint}</small>
         </label>
         <button type="submit">${copy.button}</button>
@@ -827,14 +929,36 @@ function mountTenantRoutes(
   store: WebTenantStore,
   ensureWorkspace: (user: string) => Promise<string>,
 ): () => void {
+  const loginPage = (
+    chinese: boolean,
+    error?: LoginError,
+    user?: string,
+  ): string => renderLoginPage({
+    chinese,
+    ...(error === undefined ? {} : { error }),
+    ...(user === undefined ? {} : { user }),
+  })
+
+  const setupPage = (chinese: boolean, error?: LoginError): string =>
+    renderLoginPage({
+      chinese,
+      setup: true,
+      ...(error === undefined ? {} : { error }),
+    })
+
   const disposers = [
     ctx.webServer.register({
       kind: 'exact',
-      path: `${TENANT_BASE}/login`,
+      path: `${TENANT_BASE}/setup`,
       handler: async (request, response) => {
         const chinese = chineseRequest(request)
+        if (store.hasAdmin()) {
+          response.writeHead(303, { location: `${TENANT_BASE}/login` })
+          response.end()
+          return
+        }
         if (request.method === 'GET') {
-          sendHtml(response, 200, renderLoginPage({ chinese }))
+          sendHtml(response, 200, setupPage(chinese))
           return
         }
         if (request.method !== 'POST') {
@@ -843,50 +967,96 @@ function mountTenantRoutes(
           return
         }
         if (!sameOrigin(request)) {
-          sendHtml(response, 403, renderLoginPage({ chinese, error: 'credentials' }))
+          sendHtml(response, 403, setupPage(chinese, 'credentials'))
           return
         }
         let login
         try {
           login = await readLogin(request)
         } catch {
-          sendHtml(response, 400, renderLoginPage({ chinese, error: 'password' }))
-          return
-        }
-        if (!validTenantUsername(login.user)) {
-          sendHtml(response, 400, renderLoginPage({
-            chinese,
-            error: 'username',
-            user: login.user,
-          }))
+          sendHtml(response, 400, setupPage(chinese, 'password'))
           return
         }
         if (login.password.length < 1 || login.password.length > 1024) {
-          sendHtml(response, 400, renderLoginPage({
-            chinese,
-            error: 'password',
-            user: login.user,
-          }))
+          sendHtml(response, 400, setupPage(chinese, 'password'))
+          return
+        }
+        let created
+        try {
+          created = await store.setAdminPassword(login.password)
+        } catch {
+          sendHtml(response, 400, setupPage(chinese, 'password'))
+          return
+        }
+        if (created === undefined) {
+          response.writeHead(303, { location: `${TENANT_BASE}/login` })
+          response.end()
+          return
+        }
+        setLoginCookie(response, created.token)
+        response.writeHead(303, { location: '/' })
+        response.end()
+      },
+    }),
+    ctx.webServer.register({
+      kind: 'exact',
+      path: `${TENANT_BASE}/login`,
+      handler: async (request, response) => {
+        const chinese = chineseRequest(request)
+        if (!store.hasAdmin()) {
+          response.writeHead(303, { location: `${TENANT_BASE}/setup` })
+          response.end()
+          return
+        }
+        if (request.method === 'GET') {
+          sendHtml(response, 200, loginPage(chinese))
+          return
+        }
+        if (request.method !== 'POST') {
+          response.writeHead(405, { allow: 'GET, POST' })
+          response.end()
+          return
+        }
+        if (!sameOrigin(request)) {
+          sendHtml(response, 403, loginPage(chinese, 'credentials'))
+          return
+        }
+        let login
+        try {
+          login = await readLogin(request)
+        } catch {
+          sendHtml(response, 400, loginPage(chinese, 'password'))
+          return
+        }
+        if (!validTenantUsername(login.user)) {
+          sendHtml(response, 400, loginPage(chinese, 'username', login.user))
+          return
+        }
+        if (login.password.length < 1 || login.password.length > 1024) {
+          sendHtml(response, 400, loginPage(chinese, 'password', login.user))
+          return
+        }
+        if (login.user === ADMIN_USER) {
+          const token = store.authenticateAdminPassword(login.password)
+          if (token === undefined) {
+            sendHtml(response, 401, loginPage(chinese, 'credentials', login.user))
+            return
+          }
+          setLoginCookie(response, token)
+          response.writeHead(303, { location: '/' })
+          response.end()
           return
         }
         const authenticated = await store.authenticateOrRegister(login.user, login.password)
         if (authenticated === undefined) {
-          sendHtml(response, 401, renderLoginPage({
-            chinese,
-            error: 'credentials',
-            user: login.user,
-          }))
+          sendHtml(response, 401, loginPage(chinese, 'credentials', login.user))
           return
         }
         try {
           await ensureWorkspace(login.user)
         } catch (error) {
           ctx.logger.warn(`web-tenant: default workspace failed: ${String(error)}`)
-          sendHtml(response, 500, renderLoginPage({
-            chinese,
-            error: 'workspace',
-            user: login.user,
-          }))
+          sendHtml(response, 500, loginPage(chinese, 'workspace', login.user))
           return
         }
         setLoginCookie(response, authenticated.token)
@@ -921,23 +1091,23 @@ function mountTenantRoutes(
           response.end()
           return
         }
-        if (isLoopbackAddress(request.socket.remoteAddress)) {
-          sendJson(response, 200, { loopback: true, user: null })
-          return
-        }
-        const current = store.authenticateToken(cookieValue(request))
-        if (current === undefined) {
+        const session = store.authenticateCookie(cookieValue(request))
+        if (session === undefined) {
           sendJson(response, 401, { error: 'authentication required' })
           return
         }
+        if (session.kind === 'admin') {
+          sendJson(response, 200, { admin: true, user: ADMIN_USER })
+          return
+        }
         try {
-          await ensureWorkspace(current)
+          await ensureWorkspace(session.user)
         } catch (error) {
           ctx.logger.warn(`web-tenant: default workspace failed: ${String(error)}`)
           sendJson(response, 500, { error: 'workspace unavailable' })
           return
         }
-        sendJson(response, 200, { loopback: false, user: current })
+        sendJson(response, 200, { admin: false, user: session.user })
       },
     }),
   ]
@@ -995,19 +1165,22 @@ export function installTenantGate(
       response.end()
       return
     }
-    if (isLoopbackAddress(request.socket.remoteAddress) || TENANT_PATHS.has(path)) {
+    if (TENANT_PATHS.has(path)) {
       passRequest(request, response, undefined)
       return
     }
-    const current = store.authenticateToken(cookieValue(request))
-    if (current !== undefined) {
-      passRequest(request, response, current)
+    const session = store.authenticateCookie(cookieValue(request))
+    if (session !== undefined) {
+      passRequest(request, response, scopedUser(session))
       return
     }
     const accept = request.headers.accept ?? ''
     if ((request.method === 'GET' || request.method === 'HEAD')
       && accept.includes('text/html') && !path.startsWith('/api')) {
-      const page = renderLoginPage({ chinese: chineseRequest(request) })
+      const page = renderLoginPage({
+        chinese: chineseRequest(request),
+        setup: !store.hasAdmin(),
+      })
       if (request.method === 'HEAD') {
         response.writeHead(200, {
           'cache-control': 'no-store',
@@ -1028,18 +1201,12 @@ export function installTenantGate(
   }
 
   const upgradeGate: UpgradeListener = (request, socket, head) => {
-    if (isLoopbackAddress(request.socket.remoteAddress)) {
-      context.run(undefined, () => {
-        for (const listener of upgrades) listener.call(server, request, socket, head)
-      })
-      return
-    }
-    const current = store.authenticateToken(cookieValue(request))
-    if (current === undefined) {
+    const session = store.authenticateCookie(cookieValue(request))
+    if (session === undefined) {
       sendUpgradeUnauthorized(socket)
       return
     }
-    context.run(current, () => {
+    context.run(scopedUser(session), () => {
       for (const listener of upgrades) listener.call(server, request, socket, head)
     })
   }
@@ -1101,7 +1268,7 @@ export async function apply(ctx: HostContext): Promise<void> {
   )
   ctx.effect(
     () => mountTenantRoutes(ctx, store, ensureWorkspace),
-    'oh-dsh-web-tenant: login routes',
+    'oh-dsh-web-tenant: login and setup routes',
   )
   const server = await waitForServer(ctx.webServer)
   ctx.effect(

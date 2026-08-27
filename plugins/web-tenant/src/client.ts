@@ -5,7 +5,7 @@ interface ClientContext {
 }
 
 interface TenantIdentity {
-  loopback: boolean
+  admin: boolean
   user: string | null
 }
 
@@ -80,15 +80,17 @@ async function identity(): Promise<TenantIdentity | undefined> {
   return await response.json() as TenantIdentity
 }
 
-function mountSwitch(user: string): () => void {
+function mountSwitch(user: string, admin: boolean): () => void {
   const chinese = navigator.language.toLowerCase().startsWith('zh')
   const root = document.createElement('aside')
   root.dataset.ohDshTenantSwitch = 'true'
-  root.setAttribute('aria-label', chinese ? '当前局域网账号' : 'Current LAN account')
+  root.setAttribute('aria-label', chinese ? '当前账号' : 'Current account')
 
   const name = document.createElement('span')
   name.dataset.ohDshTenantUser = 'true'
-  name.textContent = `@${user}`
+  name.textContent = admin
+    ? (chinese ? '管理员' : 'Administrator')
+    : `@${user}`
   name.title = user
 
   const button = document.createElement('button')
@@ -123,8 +125,8 @@ export function apply(ctx: ClientContext): void {
     let disposed = false
     let unmount: (() => void) | undefined
     void identity().then((current) => {
-      if (disposed || current === undefined || current.loopback || current.user === null) return
-      unmount = mountSwitch(current.user)
+      if (disposed || current === undefined || current.user === null) return
+      unmount = mountSwitch(current.user, current.admin)
     }).catch(() => {})
     return () => {
       disposed = true

@@ -226,13 +226,16 @@ bin\ohdsh.cmd web
 Desktop、Web 和 TUI 的数据根目录。按 `Ctrl+C` 优雅退出。
 
 不要在未配置访问边界时直接监听 `0.0.0.0`。对局域网开放时，应同时配置
-`--trusted-host`。非回环客户端会进入内置账号隔间：首次登录登记用户名与口令，
-后续登录必须匹配；每个用户名只能看到索引到自己的会话和工作区。在宿主机上通过
-`127.0.0.1` 打开服务，可以绕过该隔间并配置模型提供方。
+`--trusted-host`（DNS 重绑定围栏）。内置账号隔间不按 IP 或 Host 放行任何人。
+若 `web-tenant-admin` 缺失或为空，第一次 HTML 访问会设置管理员口令（用户名为
+`admin`）。之后每个客户端都要登录。普通用户名首次登录会登记，后续必须匹配；
+每个普通用户名只能看到索引到自己的会话和工作区。管理员 cookie 看到未隔离的
+目录。本体的设置与凭据仍要求回环 `Host`；这与租户 cookie 无关。
 
-该隔间只适用于可信局域网，不是公网鉴权。HttpOnly cookie 与 `web-tenants` 文件都
-包含可复用的 `user:sha256(passphrase)` token；模型提供方、插件、Marketplace 和
-Agent 文件系统访问仍然共享。向不可信网络开放前，应把服务置于带鉴权的 TLS 之后。
+该隔间只适用于可信局域网，不是公网鉴权。HttpOnly cookie、`web-tenant-admin`
+与 `web-tenants` 文件都包含可复用的 `user:sha256(passphrase)` token；模型提供方、
+插件、Marketplace 和 Agent 文件系统访问仍然共享。向不可信网络开放前，应把服务
+置于带鉴权的 TLS 之后。
 
 ### 用 Docker 运行 Web
 
@@ -258,8 +261,9 @@ runtime lock。只有在你确实要共用该数据根、并且能保证同一�
 surface 时，才覆盖 `OH_DSH_HOME_HOST`。
 
 `OH_DSH_TRUSTED_HOSTS` 是 DNS 重绑定围栏，不是登录。默认值为
-`localhost:3080`。若前面有反向代理，把它设成浏览器发送的 `Host`，并配置
-`proxy_set_header Host $host;`。SSE（Server-Sent Events）需要关闭代理缓冲
+`localhost:3080`。若前面有反向代理，把它设成浏览器发送的 `Host`，例如
+`OH_DSH_TRUSTED_HOSTS=dsh.example.com`（见 `docker/.env.example`），并配置
+`proxy_set_header Host $http_host;`。SSE（Server-Sent Events）需要关闭代理缓冲
 （`proxy_buffering off`，并加长 `proxy_read_timeout`）。当内置的可信局域网隔间不足以
 构成访问边界时，仍须由代理提供鉴权与 TLS。
 
