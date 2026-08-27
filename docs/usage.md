@@ -263,7 +263,51 @@ overrides the data root for Desktop, Web, and TUI together. Press `Ctrl+C` for
 a graceful shutdown.
 
 Do not bind to `0.0.0.0` without an access boundary. For LAN exposure, add
-`--trusted-host` and put authentication and TLS in a trusted reverse proxy.
+`--trusted-host`. Non-loopback clients enter the built-in account compartment:
+the first login registers a username and passphrase, later logins must match,
+and each username sees only its indexed sessions and workspaces. Open the
+service through `127.0.0.1` on the host to bypass the compartment and configure
+model providers.
+
+The compartment is for a trusted LAN, not the public internet. Its HttpOnly
+cookie and the `web-tenants` file both contain the reusable token
+`user:sha256(passphrase)`; providers, plugins, Marketplace, and Agent filesystem
+access remain shared. Put the service behind authenticated TLS before exposing
+it to an untrusted network.
+
+### Run Web in Docker
+
+`docker/` packages the published linux-x64 Web release. Rebuild the image
+to upgrade; do not run `ohdsh update` inside the container.
+
+```sh
+docker compose -f docker/compose.yaml up --build
+```
+
+The UI listens on `http://127.0.0.1:3080`. Pin a release with
+`OH_DSH_VERSION=vX.Y.Z` at build time.
+
+Two host bind mounts sit next to the compose file and survive container
+rebuilds and Docker engine resets:
+
+- `docker/data` → `/data` (`OH_DSH_HOME`: sessions, credentials, settings,
+  plugins)
+- `docker/workspace` → `/workspace` (the Agent workspace)
+
+Do not bind the host `~/.ohdsh` by default: a local Desktop or TUI
+instance would contend for the same runtime lock. Override
+`OH_DSH_HOME_HOST` only when you intend to share that root and can keep
+exactly one surface running.
+
+`OH_DSH_TRUSTED_HOSTS` is the DNS-rebinding fence, not login. The default
+is `localhost:3080`. Behind a reverse proxy, set it to the `Host` the
+browser sends and pass `proxy_set_header Host $host;`. Disable proxy
+buffering for SSE (`proxy_buffering off` and a long `proxy_read_timeout`).
+Proxy authentication and TLS remain required when the built-in trusted-LAN
+compartment is not a sufficient boundary.
+
+On Linux, if uid 1000 cannot write the binds, `chown` those directories or
+set `user: "${UID}:${GID}"` in Compose.
 
 ## Install TUI-only
 

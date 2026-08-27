@@ -1043,6 +1043,7 @@ const SURFACE_PACKAGE_NAMES = Object.freeze({
     '@oh-dsh/sidebar',
     '@oh-dsh/panel-controls',
     '@oh-dsh/plugin-marketplace',
+    '@oh-dsh/web-tenant',
     'dsh-context',
     '@deepseek-harness-tui/dsh-auth',
   ]),
@@ -1103,6 +1104,7 @@ function installDesktopPackages(surface = 'all') {
       'panel-controls',
       'pinned-summary',
       'plugin-marketplace',
+      'web-tenant',
     ].map(directory => ({
       manifest: join(root, 'plugins', directory, 'package.json'),
       files: [
@@ -1331,6 +1333,9 @@ for (const required of [
   'plugins/pinned-summary/client.js',
   'plugins/plugin-marketplace/index.js',
   'plugins/plugin-marketplace/client.js',
+  'plugins/web-tenant/index.js',
+  'plugins/web-tenant/client.js',
+  'plugins/web-tenant/client.js.map',
   'plugins/tui/index.js',
   'plugins/tui/cordis.patch.yml',
   'plugins/tui-marketplace/index.js',

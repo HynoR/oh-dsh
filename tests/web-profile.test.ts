@@ -120,11 +120,17 @@ test('web bundle patch mounts the web-capable Oh-DSH plugins', () => {
     'oh-sidebar',
     'oh-panel-controls',
     'oh-plugin-marketplace',
+    'oh-web-tenant',
   ]) {
     assert.match(patch, new RegExp(`- id: ${row}`))
   }
   // Only the Electron shell itself stays out of the web composition.
   assert.doesNotMatch(patch, /- id: oh-desktop\b/)
+  assert.doesNotMatch(readFileSync(join(root, 'cordis.patch.yml'), 'utf8'), /oh-web-tenant/)
+  assert.doesNotMatch(
+    readFileSync(join(root, 'plugins', 'tui', 'cordis.patch.yml'), 'utf8'),
+    /oh-web-tenant/,
+  )
 })
 
 test('web launcher defaults match the dsh-web-app bundle surface', () => {

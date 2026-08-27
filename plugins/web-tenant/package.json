@@ -1,0 +1,27 @@
+{
+  "name": "@oh-dsh/web-tenant",
+  "version": "0.1.4",
+  "description": "LAN tenant gate for the Oh-DSH Web surface",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "files": [
+    "dist/index.js",
+    "dist/client.js",
+    "dist/client.js.map"
+  ]
+}

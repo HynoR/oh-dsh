@@ -19,6 +19,9 @@
     - id: oh-web
       name: '@oh-dsh/web'
 
+    - id: oh-web-tenant
+      name: '@oh-dsh/web-tenant'
+
     - id: oh-liangshen
       name: '@oh-dsh/liangshen'
 

@@ -226,7 +226,42 @@ bin\ohdsh.cmd web
 Desktop、Web 和 TUI 的数据根目录。按 `Ctrl+C` 优雅退出。
 
 不要在未配置访问边界时直接监听 `0.0.0.0`。对局域网开放时，应同时配置
-`--trusted-host`，并由可信反向代理提供鉴权和 TLS。
+`--trusted-host`。非回环客户端会进入内置账号隔间：首次登录登记用户名与口令，
+后续登录必须匹配；每个用户名只能看到索引到自己的会话和工作区。在宿主机上通过
+`127.0.0.1` 打开服务，可以绕过该隔间并配置模型提供方。
+
+该隔间只适用于可信局域网，不是公网鉴权。HttpOnly cookie 与 `web-tenants` 文件都
+包含可复用的 `user:sha256(passphrase)` token；模型提供方、插件、Marketplace 和
+Agent 文件系统访问仍然共享。向不可信网络开放前，应把服务置于带鉴权的 TLS 之后。
+
+### 用 Docker 运行 Web
+
+`docker/` 打包已发布的 linux-x64 Web 发行。升级请重建镜像，不要在容器内执行
+`ohdsh update`。
+
+```sh
+docker compose -f docker/compose.yaml up --build
+```
+
+界面监听 `http://127.0.0.1:3080`。构建时用 `OH_DSH_VERSION=vX.Y.Z` 钉住发行版本。
+
+compose 文件旁有两处宿主机 bind mount，重建容器或重置 Docker 引擎后仍然保留：
+
+- `docker/data` → `/data`（`OH_DSH_HOME`：会话、凭据、设置、插件）
+- `docker/workspace` → `/workspace`（Agent 工作区）
+
+默认不要绑定宿主机的 `~/.ohdsh`：本机 Desktop 或 TUI 会与容器争用同一把
+runtime lock。只有在你确实要共用该数据根、并且能保证同一时刻只运行一个
+surface 时，才覆盖 `OH_DSH_HOME_HOST`。
+
+`OH_DSH_TRUSTED_HOSTS` 是 DNS 重绑定围栏，不是登录。默认值为
+`localhost:3080`。若前面有反向代理，把它设成浏览器发送的 `Host`，并配置
+`proxy_set_header Host $host;`。SSE（Server-Sent Events）需要关闭代理缓冲
+（`proxy_buffering off`，并加长 `proxy_read_timeout`）。当内置的可信局域网隔间不足以
+构成访问边界时，仍须由代理提供鉴权与 TLS。
+
+在 Linux 上，若 uid 1000 无法写入这两处绑定，请 `chown` 这些目录，或在
+Compose 中设置 `user: "${UID}:${GID}"`。
 
 ## 安装 TUI-only
 

@@ -10,3 +10,7 @@ tmp/
 result
 result-*
 .agent-workflows/
+docker/data/*
+!docker/data/.gitkeep
+docker/workspace/*
+!docker/workspace/.gitkeep

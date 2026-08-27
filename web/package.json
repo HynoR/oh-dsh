@@ -30,7 +30,8 @@
         "@oh-dsh/pinned-summary",
         "@oh-dsh/sidebar",
         "@oh-dsh/panel-controls",
-        "@oh-dsh/plugin-marketplace"
+        "@oh-dsh/plugin-marketplace",
+        "@oh-dsh/web-tenant"
       ],
       "platform": "web",
       "immediately": true

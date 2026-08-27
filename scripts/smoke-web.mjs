@@ -127,6 +127,7 @@ for (const row of [
   'oh-sidebar',
   'oh-panel-controls',
   'oh-plugin-marketplace',
+  'oh-web-tenant',
   'dsh-context',
   'dsh-auth',
 ]) {
@@ -218,6 +219,7 @@ try {
     '@oh-dsh/panel-controls',
     '@oh-dsh/vision',
     '@oh-dsh/plugin-marketplace',
+    '@oh-dsh/web-tenant',
     'dsh-context',
   ]) {
     const row = bootEntries.find(entry => entry.id === pluginId)
@@ -283,6 +285,15 @@ try {
     true,
     '@oh-dsh/plugin-marketplace must enroll in the Oh-DSH Web client graph',
   )
+  assert.equal(
+    bootEntries.some(entry => entry.id === '@oh-dsh/web-tenant'),
+    true,
+    '@oh-dsh/web-tenant must enroll in the Oh-DSH Web client graph',
+  )
+
+  const tenantIdentityResponse = await fetch(new URL('/oh-dsh/tenant/me', base))
+  assert.equal(tenantIdentityResponse.status, 200)
+  assert.deepEqual(await tenantIdentityResponse.json(), { loopback: true, user: null })
 
   // The skins preferences server mounts on the web server.
   const preferencesUrl = new URL('/oh-dsh/skins/preferences', base)

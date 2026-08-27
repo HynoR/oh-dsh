@@ -1,0 +1,31 @@
+# Oh-DSH Web. Bind mounts next to this file survive container rebuilds and
+# Docker resets. Upgrade by rebuilding the image, not `ohdsh update`.
+#
+#   docker compose -f docker/compose.yaml up --build
+#
+# Pin a release: OH_DSH_VERSION=vX.Y.Z docker compose -f docker/compose.yaml build
+# Behind Nginx, set OH_DSH_TRUSTED_HOSTS to the browser Host and pass
+# `proxy_set_header Host $host;`. Do not publish 3080 on all interfaces.
+
+name: oh-dsh-web
+
+services:
+  web:
+    platform: linux/amd64
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        OH_DSH_VERSION: ${OH_DSH_VERSION:-}
+        GH_TOKEN: ${GH_TOKEN:-}
+    ports:
+      - "127.0.0.1:3080:3080"
+    environment:
+      OH_DSH_UPDATE_CHECK: "0"
+      DSH_OH_WEB_OPEN: "0"
+      OH_DSH_HOME: /data
+      OH_DSH_TRUSTED_HOSTS: ${OH_DSH_TRUSTED_HOSTS:-localhost:3080}
+    volumes:
+      - ${OH_DSH_HOME_HOST:-./data}:/data
+      - ${OH_DSH_WORKSPACE:-./workspace}:/workspace
+    working_dir: /workspace

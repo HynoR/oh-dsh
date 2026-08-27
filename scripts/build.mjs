@@ -35,6 +35,7 @@ const pluginPackages = [
   { directory: 'panel-controls', id: '@oh-dsh/panel-controls' },
   { directory: 'pinned-summary', id: '@oh-dsh/pinned-summary' },
   { directory: 'plugin-marketplace', id: '@oh-dsh/plugin-marketplace' },
+  { directory: 'web-tenant', id: '@oh-dsh/web-tenant' },
 ]
 
 const shared = {
