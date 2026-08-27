@@ -66,5 +66,5 @@ ENV DSH_OH_WEB_OPEN=0
 ENV HOME=/home/ohdsh
 
 WORKDIR /workspace
-USER ohdsh
+# Entrypoint starts as root, chowns the bind mounts, then drops to ohdsh.
 ENTRYPOINT ["/usr/local/bin/ohdsh-web-entrypoint"]

@@ -263,8 +263,9 @@ surface 时，才覆盖 `OH_DSH_HOME_HOST`。
 （`proxy_buffering off`，并加长 `proxy_read_timeout`）。当内置的可信局域网隔间不足以
 构成访问边界时，仍须由代理提供鉴权与 TLS。
 
-在 Linux 上，若 uid 1000 无法写入这两处绑定，请 `chown` 这些目录，或在
-Compose 中设置 `user: "${UID}:${GID}"`。
+entrypoint 以 root 启动，把这两处 bind 挂载点 `chown` 成 uid 1000，再降权到
+`ohdsh` 后 exec。Web 进程不是 root。若 Compose 设置了 `user:`，则跳过该步骤，
+挂载点必须事先可写。
 
 ## 安装 TUI-only
 

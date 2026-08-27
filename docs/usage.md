@@ -310,8 +310,10 @@ buffering for SSE (`proxy_buffering off` and a long `proxy_read_timeout`).
 Proxy authentication and TLS remain required when the built-in trusted-LAN
 compartment is not a sufficient boundary.
 
-On Linux, if uid 1000 cannot write the binds, `chown` those directories or
-set `user: "${UID}:${GID}"` in Compose.
+The entrypoint starts as root, `chown`s the two bind mount points to uid
+1000, then drops to `ohdsh` before exec. The Web process is not root. If
+Compose sets `user:`, that skip happens and the mounts must already be
+writable.
 
 ## Install TUI-only
 
