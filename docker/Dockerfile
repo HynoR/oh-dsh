@@ -46,6 +46,7 @@ RUN apt-get update \
     ca-certificates \
     curl \
     git \
+    libatomic1 \
     tini \
   && rm -rf /var/lib/apt/lists/*
 
